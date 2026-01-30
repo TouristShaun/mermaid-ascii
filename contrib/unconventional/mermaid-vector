@@ -1,0 +1,91 @@
+#!/bin/bash
+# mermaid-vector - wrap diagrams in retro vector graphics style
+#
+# Usage:
+#   echo "graph LR; A-->B" | mermaid-vector
+#   mermaid-vector -f diagram.mermaid
+#
+# Renders your diagram inside a retro vector display frame
+# like classic arcade games (Asteroids, Tempest, Battlezone)
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found"
+    exit 1
+fi
+
+# Parse arguments
+INPUT=""
+if [ "$1" = "-f" ] && [ -n "$2" ]; then
+    INPUT=$(cat "$2")
+elif [ -n "$1" ]; then
+    INPUT="$1"
+elif [ ! -t 0 ]; then
+    INPUT=$(cat)
+fi
+
+if [ -z "$INPUT" ]; then
+    echo "Usage: mermaid-vector [-f file] [diagram]"
+    exit 1
+fi
+
+# Render the diagram
+DIAGRAM=$("$MERMAID_ASCII_BIN" -f - --ascii -x 2 -y 1 <<< "$INPUT" 2>/dev/null)
+
+if [ -z "$DIAGRAM" ]; then
+    echo "Error: Failed to render diagram"
+    exit 1
+fi
+
+# Get diagram dimensions
+WIDTH=$(echo "$DIAGRAM" | awk '{ print length }' | sort -rn | head -1)
+HEIGHT=$(echo "$DIAGRAM" | wc -l)
+
+# Vector frame dimensions (add padding)
+FRAME_W=$((WIDTH + 8))
+FRAME_H=$((HEIGHT + 6))
+
+# ANSI colors for vector glow effect (green phosphor)
+GREEN='\033[32m'
+BRIGHT_GREEN='\033[92m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# Draw vector frame
+draw_line() {
+    local char="$1"
+    local len="$2"
+    printf '%*s' "$len" | tr ' ' "$char"
+}
+
+echo ""
+# Top border with corner vectors
+printf "${BRIGHT_GREEN}"
+echo "    /$(draw_line '=' $FRAME_W)\\"
+echo "   / $(draw_line ' ' $FRAME_W) \\"
+printf "  /  ${DIM}< VECTOR DISPLAY >${RESET}${BRIGHT_GREEN}"
+printf '%*s' $((FRAME_W - 17)) ""
+echo "  \\"
+echo " |$(draw_line '-' $((FRAME_W + 2)))|"
+
+# Diagram content with side borders
+echo "$DIAGRAM" | while IFS= read -r line; do
+    printf " |  ${GREEN}%-${WIDTH}s${BRIGHT_GREEN}    |\n" "$line"
+done
+
+# Bottom scanline effect
+echo " |$(draw_line '-' $((FRAME_W + 2)))|"
+printf "  \\  ${DIM}%.2f MHz  //  SYNC${RESET}${BRIGHT_GREEN}" "$(echo "scale=2; $RANDOM/10000" | bc)"
+printf '%*s' $((FRAME_W - 22)) ""
+echo "  /"
+echo "   \\ $(draw_line ' ' $FRAME_W) /"
+echo "    \\$(draw_line '=' $FRAME_W)/"
+
+# Coordinate markers (like oscilloscope)
+printf "${DIM}"
+echo ""
+echo "    ^Y"
+echo "    |"
+printf "    +---> X   [%dx%d]" "$WIDTH" "$HEIGHT"
+printf "${RESET}\n\n"

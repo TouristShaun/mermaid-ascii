@@ -1,0 +1,97 @@
+#!/bin/bash
+# mermaid-svg - convert ASCII diagram to SVG vector graphics
+#
+# Usage:
+#   echo "graph LR; A-->B" | mermaid-svg > diagram.svg
+#   mermaid-svg -f diagram.mermaid -o output.svg
+#
+# Creates a proper SVG file from your mermaid diagram
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found" >&2
+    exit 1
+fi
+
+# Parse arguments
+INPUT=""
+OUTPUT="/dev/stdout"
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f) INPUT=$(cat "$2"); shift 2 ;;
+        -o) OUTPUT="$2"; shift 2 ;;
+        *) INPUT="$1"; shift ;;
+    esac
+done
+
+if [ -z "$INPUT" ] && [ ! -t 0 ]; then
+    INPUT=$(cat)
+fi
+
+if [ -z "$INPUT" ]; then
+    echo "Usage: mermaid-svg [-f file] [-o output.svg] [diagram]" >&2
+    exit 1
+fi
+
+# Render the diagram
+DIAGRAM=$("$MERMAID_ASCII_BIN" -f - -x 2 -y 1 <<< "$INPUT" 2>/dev/null)
+
+if [ -z "$DIAGRAM" ]; then
+    echo "Error: Failed to render diagram" >&2
+    exit 1
+fi
+
+# Get dimensions
+WIDTH=$(echo "$DIAGRAM" | awk '{ print length }' | sort -rn | head -1)
+HEIGHT=$(echo "$DIAGRAM" | wc -l)
+
+# SVG dimensions (monospace: ~8px per char, ~16px per line)
+CHAR_W=8
+CHAR_H=16
+SVG_W=$((WIDTH * CHAR_W + 40))
+SVG_H=$((HEIGHT * CHAR_H + 40))
+
+# Generate SVG to temp file first
+TMPFILE=$(mktemp)
+cat > "$TMPFILE" << SVGHEADER
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $SVG_W $SVG_H" width="$SVG_W" height="$SVG_H">
+  <style>
+    .diagram {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 14px;
+      fill: #00ff00;
+    }
+    .bg { fill: #0a0a0a; }
+    .frame { fill: none; stroke: #00ff00; stroke-width: 2; }
+    .glow { filter: drop-shadow(0 0 3px #00ff00); }
+  </style>
+  <rect class="bg" width="100%" height="100%" />
+  <rect class="frame" x="10" y="10" width="$((SVG_W - 20))" height="$((SVG_H - 20))" rx="5" />
+  <g class="diagram glow">
+SVGHEADER
+
+# Convert each line to SVG text element
+LINE_NUM=0
+echo "$DIAGRAM" | while IFS= read -r line; do
+    Y=$((30 + LINE_NUM * CHAR_H))
+    # Escape XML special characters
+    ESCAPED=$(echo "$line" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+    echo "    <text x=\"20\" y=\"$Y\">$ESCAPED</text>"
+    LINE_NUM=$((LINE_NUM + 1))
+done >> "$TMPFILE"
+
+cat >> "$TMPFILE" << SVGFOOTER
+  </g>
+</svg>
+SVGFOOTER
+
+# Output result
+if [ "$OUTPUT" = "/dev/stdout" ]; then
+    cat "$TMPFILE"
+else
+    cp "$TMPFILE" "$OUTPUT"
+    echo "SVG written to: $OUTPUT" >&2
+fi
+rm -f "$TMPFILE"
