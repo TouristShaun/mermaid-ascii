@@ -1,0 +1,236 @@
+#!/bin/bash
+# mermaid-webkit - render diagram in browser with WebKit styling
+#
+# Usage:
+#   echo "graph LR; A-->B" | mermaid-webkit
+#   mermaid-webkit -f diagram.mermaid
+#   mermaid-webkit -f diagram.mermaid -o output.html
+#
+# Opens your ASCII diagram in a beautiful browser view
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found" >&2
+    exit 1
+fi
+
+# Parse arguments
+INPUT=""
+OUTPUT=""
+NO_OPEN=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f) INPUT=$(cat "$2"); shift 2 ;;
+        -o) OUTPUT="$2"; shift 2 ;;
+        --no-open) NO_OPEN=true; shift ;;
+        *) INPUT="$1"; shift ;;
+    esac
+done
+
+if [ -z "$INPUT" ] && [ ! -t 0 ]; then
+    INPUT=$(cat)
+fi
+
+if [ -z "$INPUT" ]; then
+    echo "Usage: mermaid-webkit [-f file] [-o output.html] [--no-open] [diagram]" >&2
+    exit 1
+fi
+
+# Render the diagram (with Unicode for nicer browser display)
+DIAGRAM=$("$MERMAID_ASCII_BIN" -f - -x 2 -y 1 <<< "$INPUT" 2>/dev/null)
+
+if [ -z "$DIAGRAM" ]; then
+    echo "Error: Failed to render diagram" >&2
+    exit 1
+fi
+
+# Escape for HTML
+ESCAPED=$(echo "$DIAGRAM" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+# Generate HTML
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+HTML=$(cat << HTMLEOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid ASCII - WebKit View</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .dot.red { background: #ff5f57; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #28ca41; }
+
+        .title {
+            margin-left: 1rem;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .diagram {
+            font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #e2e8f0;
+            white-space: pre;
+            overflow-x: auto;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* WebKit-specific glow effect */
+        @supports (-webkit-text-stroke: 1px black) {
+            .diagram {
+                text-shadow:
+                    0 0 10px rgba(100, 200, 255, 0.3),
+                    0 0 20px rgba(100, 200, 255, 0.2);
+            }
+        }
+
+        .footer {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        /* WebKit scrollbar styling */
+        .diagram::-webkit-scrollbar {
+            height: 8px;
+        }
+        .diagram::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+        .diagram::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .diagram::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="title">mermaid-ascii</span>
+        </div>
+        <pre class="diagram" id="diagram">$ESCAPED</pre>
+        <div class="footer">
+            <span>Generated: $TIMESTAMP</span>
+            <button class="copy-btn" onclick="copyDiagram()">Copy to Clipboard</button>
+        </div>
+    </div>
+    <script>
+        function copyDiagram() {
+            const text = document.getElementById('diagram').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
+            });
+        }
+    </script>
+</body>
+</html>
+HTMLEOF
+)
+
+# Output or open in browser
+if [ -n "$OUTPUT" ]; then
+    echo "$HTML" > "$OUTPUT"
+    echo "HTML written to: $OUTPUT" >&2
+    if [ "$NO_OPEN" = false ]; then
+        # Try to open in browser
+        if command -v xdg-open &> /dev/null; then
+            xdg-open "$OUTPUT" 2>/dev/null &
+        elif command -v open &> /dev/null; then
+            open "$OUTPUT"
+        fi
+    fi
+else
+    # Create temp file and open
+    TMPFILE=$(mktemp --suffix=.html)
+    echo "$HTML" > "$TMPFILE"
+    if [ "$NO_OPEN" = false ]; then
+        if command -v xdg-open &> /dev/null; then
+            xdg-open "$TMPFILE" 2>/dev/null &
+            echo "Opened in browser: $TMPFILE" >&2
+        elif command -v open &> /dev/null; then
+            open "$TMPFILE"
+            echo "Opened in browser: $TMPFILE" >&2
+        else
+            cat "$TMPFILE"
+        fi
+    else
+        cat "$TMPFILE"
+        rm -f "$TMPFILE"
+    fi
+fi

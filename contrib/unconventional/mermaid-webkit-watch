@@ -1,0 +1,225 @@
+#!/bin/bash
+# mermaid-webkit-watch - live-reload diagram in browser
+#
+# Usage:
+#   mermaid-webkit-watch diagram.mermaid
+#
+# Watches the file and auto-refreshes browser on changes
+# Uses WebKit EventSource for live updates
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+PORT="${PORT:-8765}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found" >&2
+    exit 1
+fi
+
+if [ -z "$1" ]; then
+    echo "Usage: mermaid-webkit-watch <file.mermaid>" >&2
+    exit 1
+fi
+
+WATCH_FILE="$1"
+if [ ! -f "$WATCH_FILE" ]; then
+    echo "Error: File not found: $WATCH_FILE" >&2
+    exit 1
+fi
+
+# Create the HTML with live-reload support
+create_html() {
+    local diagram=$("$MERMAID_ASCII_BIN" -f "$WATCH_FILE" -x 2 -y 1 2>/dev/null)
+    local escaped=$(echo "$diagram" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+    cat << HTMLEOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔴 LIVE: $(basename "$WATCH_FILE")</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            background: #0d1117;
+            font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+        .live-indicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #f85149;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .connected .live-dot { background: #3fb950; }
+        .file-name {
+            color: #58a6ff;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            font-family: monospace;
+        }
+        .diagram {
+            font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #c9d1d9;
+            white-space: pre;
+            padding: 2rem;
+            background: #161b22;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            transition: opacity 0.15s;
+        }
+        .updating { opacity: 0.7; }
+        .timestamp {
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: #484f58;
+        }
+    </style>
+</head>
+<body>
+    <div class="live-indicator" id="status">
+        <span class="live-dot"></span>
+        <span>Watching for changes...</span>
+    </div>
+    <div class="file-name">$WATCH_FILE</div>
+    <pre class="diagram" id="diagram">$escaped</pre>
+    <div class="timestamp" id="timestamp">Last update: $(date '+%H:%M:%S')</div>
+
+    <script>
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+
+        function connect() {
+            const es = new EventSource('/events');
+
+            es.onopen = () => {
+                document.getElementById('status').classList.add('connected');
+                document.querySelector('.live-dot').style.background = '#3fb950';
+                reconnectAttempts = 0;
+            };
+
+            es.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') {
+                    const diagram = document.getElementById('diagram');
+                    diagram.classList.add('updating');
+                    setTimeout(() => {
+                        diagram.textContent = data.content;
+                        diagram.classList.remove('updating');
+                        document.getElementById('timestamp').textContent =
+                            'Last update: ' + new Date().toLocaleTimeString();
+                    }, 100);
+                }
+            };
+
+            es.onerror = () => {
+                es.close();
+                document.getElementById('status').classList.remove('connected');
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connect, 1000 * reconnectAttempts);
+                }
+            };
+        }
+
+        connect();
+    </script>
+</body>
+</html>
+HTMLEOF
+}
+
+# Simple HTTP server with SSE support using bash/netcat
+TMPDIR=$(mktemp -d)
+FIFO="$TMPDIR/events"
+mkfifo "$FIFO"
+
+cleanup() {
+    rm -rf "$TMPDIR"
+    kill $(jobs -p) 2>/dev/null
+    exit 0
+}
+trap cleanup EXIT INT TERM
+
+echo "Starting WebKit live server on http://localhost:$PORT"
+echo "Watching: $WATCH_FILE"
+echo "Press Ctrl+C to stop"
+echo ""
+
+# Open browser
+if command -v xdg-open &> /dev/null; then
+    xdg-open "http://localhost:$PORT" 2>/dev/null &
+elif command -v open &> /dev/null; then
+    open "http://localhost:$PORT"
+fi
+
+# File watcher in background
+(
+    LAST_HASH=""
+    while true; do
+        HASH=$(md5sum "$WATCH_FILE" 2>/dev/null | cut -d' ' -f1)
+        if [ "$HASH" != "$LAST_HASH" ] && [ -n "$HASH" ]; then
+            LAST_HASH="$HASH"
+            CONTENT=$("$MERMAID_ASCII_BIN" -f "$WATCH_FILE" -x 2 -y 1 2>/dev/null | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' '\r' | sed 's/\r/\\n/g')
+            echo "{\"type\":\"update\",\"content\":\"$CONTENT\"}" > "$FIFO" 2>/dev/null || true
+            echo "[$(date '+%H:%M:%S')] File changed, updating..."
+        fi
+        sleep 1
+    done
+) &
+
+# HTTP server
+while true; do
+    {
+        read -r REQUEST
+        REQUEST_PATH=$(echo "$REQUEST" | awk '{print $2}')
+
+        case "$REQUEST_PATH" in
+            /events)
+                echo -e "HTTP/1.1 200 OK\r"
+                echo -e "Content-Type: text/event-stream\r"
+                echo -e "Cache-Control: no-cache\r"
+                echo -e "Connection: keep-alive\r"
+                echo -e "Access-Control-Allow-Origin: *\r"
+                echo -e "\r"
+                while read -r line < "$FIFO"; do
+                    echo "data: $line"
+                    echo ""
+                done
+                ;;
+            *)
+                HTML=$(create_html)
+                echo -e "HTTP/1.1 200 OK\r"
+                echo -e "Content-Type: text/html; charset=utf-8\r"
+                echo -e "Content-Length: ${#HTML}\r"
+                echo -e "\r"
+                echo "$HTML"
+                ;;
+        esac
+    } | nc -l -p "$PORT" -q 1 2>/dev/null || nc -l "$PORT" 2>/dev/null
+done
