@@ -52,3 +52,16 @@ docker-run:
 
 dev:
 	air
+
+.PHONY: diagram
+diagram: build/$(pkgname)
+	@echo "graph TD" > /tmp/makefile-diagram.mermaid
+	@echo "    A[make all] --> B[go build]" >> /tmp/makefile-diagram.mermaid
+	@echo "    B --> C[mermaid-ascii]" >> /tmp/makefile-diagram.mermaid
+	@echo "    C --> D[completions]" >> /tmp/makefile-diagram.mermaid
+	@echo "    A --> E[make test]" >> /tmp/makefile-diagram.mermaid
+	@echo "    E --> F[go test]" >> /tmp/makefile-diagram.mermaid
+	@echo "    A --> G[make install]" >> /tmp/makefile-diagram.mermaid
+	@echo "    G --> H[/usr/local/bin]" >> /tmp/makefile-diagram.mermaid
+	@./build/$(pkgname) -f /tmp/makefile-diagram.mermaid --ascii
+	@rm /tmp/makefile-diagram.mermaid

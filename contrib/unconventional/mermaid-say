@@ -1,0 +1,61 @@
+#!/bin/bash
+# mermaid-say - cowsay meets mermaid diagrams
+#
+# Usage:
+#   echo "graph LR; A-->B" | mermaid-say
+#   mermaid-say -f diagram.mermaid
+#   mermaid-say "graph LR; A-->B"
+#
+# A cow (or other creature) presents your diagram!
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found"
+    exit 1
+fi
+
+# Parse arguments
+INPUT=""
+if [ "$1" = "-f" ] && [ -n "$2" ]; then
+    INPUT=$(cat "$2")
+elif [ -n "$1" ]; then
+    INPUT="$1"
+elif [ ! -t 0 ]; then
+    INPUT=$(cat)
+fi
+
+if [ -z "$INPUT" ]; then
+    echo "Usage: mermaid-say [-f file] [diagram]"
+    exit 1
+fi
+
+# Render the diagram
+DIAGRAM=$("$MERMAID_ASCII_BIN" -f - --ascii -x 2 -y 1 <<< "$INPUT" 2>/dev/null)
+
+if [ -z "$DIAGRAM" ]; then
+    echo "Error: Failed to render diagram"
+    exit 1
+fi
+
+# Get diagram dimensions
+WIDTH=$(echo "$DIAGRAM" | awk '{ print length }' | sort -rn | head -1)
+HEIGHT=$(echo "$DIAGRAM" | wc -l)
+
+# Draw speech bubble
+TOP_LINE=$(printf '_%.0s' $(seq 1 $((WIDTH + 2))))
+BOTTOM_LINE=$(printf -- '-%.0s' $(seq 1 $((WIDTH + 2))))
+echo " $TOP_LINE"
+echo "$DIAGRAM" | while IFS= read -r line; do
+    printf '| %-'"${WIDTH}"'s |\n' "$line"
+done
+echo " $BOTTOM_LINE"
+
+# The cow!
+cat << 'COW'
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+COW

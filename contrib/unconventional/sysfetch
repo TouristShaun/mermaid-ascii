@@ -1,0 +1,42 @@
+#!/bin/bash
+# sysfetch - neofetch-style system info as a mermaid diagram
+#
+# Usage: ./sysfetch
+#
+# Displays your system information as a beautiful ASCII flowchart
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    echo "Error: mermaid-ascii not found. Set MERMAID_ASCII_BIN or add to PATH"
+    exit 1
+fi
+
+# Gather system info
+USER_HOST="${USER}@$(hostname)"
+OS=$(uname -s)
+KERNEL=$(uname -r | cut -d'-' -f1)
+SHELL_NAME=$(basename "$SHELL")
+UPTIME=$(uptime -p 2>/dev/null | sed 's/up //' | cut -c1-15 || echo "unknown")
+CPU_CORES=$(nproc 2>/dev/null || echo "?")
+MEM_TOTAL=$(free -h 2>/dev/null | awk '/^Mem:/ {print $2}' || echo "?")
+
+# Current directory info
+PWD_SHORT=$(basename "$PWD")
+GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "none")
+
+# Build the diagram
+diagram="graph TD
+    U[${USER_HOST}] --> S[${OS}]
+    S --> K[kernel ${KERNEL}]
+    S --> SH[${SHELL_NAME}]
+    S --> HW[${CPU_CORES} cores]
+    HW --> M[${MEM_TOTAL} RAM]
+    U --> D[${PWD_SHORT}]
+    D --> G[git: ${GIT_BRANCH}]"
+
+echo ""
+echo "$diagram" | "$MERMAID_ASCII_BIN" -f - --ascii -x 3 -y 2
+echo ""
+echo "  uptime: $UPTIME"
+echo ""

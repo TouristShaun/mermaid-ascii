@@ -1,0 +1,42 @@
+#!/bin/bash
+# Git post-commit hook that renders your recent commit history as ASCII art
+#
+# Installation:
+#   cp contrib/unconventional/git-post-commit-hook .git/hooks/post-commit
+#   chmod +x .git/hooks/post-commit
+#
+# Requires: mermaid-ascii in PATH or set MERMAID_ASCII_BIN
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+# Check if mermaid-ascii is available
+if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+    exit 0  # Silently skip if not installed
+fi
+
+# Get last 5 commits
+commits=$(git log --oneline -5 --reverse 2>/dev/null)
+if [ -z "$commits" ]; then
+    exit 0
+fi
+
+# Build mermaid diagram from git history
+diagram="graph LR"
+prev=""
+while IFS= read -r line; do
+    hash=$(echo "$line" | cut -c1-7)
+    msg=$(echo "$line" | cut -c9- | sed 's/[^a-zA-Z0-9 ]//g' | cut -c1-20)
+    node="${hash}[${msg}]"
+
+    if [ -n "$prev" ]; then
+        diagram="$diagram
+    $prev --> $node"
+    fi
+    prev="$node"
+done <<< "$commits"
+
+# Render the diagram
+echo ""
+echo "Recent commit flow:"
+echo "$diagram" | "$MERMAID_ASCII_BIN" -f - --ascii -x 2 -y 1 2>/dev/null
+echo ""

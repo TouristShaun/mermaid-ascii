@@ -1,0 +1,97 @@
+#!/bin/bash
+# mermaid-fortune - fortune cookie, but make it diagrams
+#
+# Add to your .bashrc or .zshrc:
+#   source /path/to/mermaid-fortune
+#
+# Or run directly for a random wisdom diagram
+
+MERMAID_ASCII_BIN="${MERMAID_ASCII_BIN:-mermaid-ascii}"
+
+mermaid_fortune() {
+    if ! command -v "$MERMAID_ASCII_BIN" &> /dev/null; then
+        return 0
+    fi
+
+    # Collection of wise diagrams
+    local diagrams=(
+"graph LR
+    A[Bug] --> B[Coffee]
+    B --> C[More Code]
+    C --> D[More Bugs]
+    D --> A"
+
+"graph TD
+    A[git push] --> B{CI passes?}
+    B -->|Yes| C[Celebrate]
+    B -->|No| D[git blame]
+    D --> E[It was you]"
+
+"graph LR
+    A[Problem] --> B[Google It]
+    B --> C[StackOverflow]
+    C --> D[Copy Paste]
+    D --> E[Works]
+    E --> F[Ship It]"
+
+"graph TD
+    A[Monday] --> B[Tuesday]
+    B --> C[Wednesday]
+    C --> D[Thursday]
+    D --> E[Friday]
+    E --> F[Weekend]
+    F --> A"
+
+"sequenceDiagram
+    Dev->>Code: Write
+    Code-->>Dev: Error
+    Dev->>Google: Search
+    Google-->>Dev: Answer
+    Dev->>Code: Fix
+    Code-->>Dev: New Error"
+
+"graph LR
+    A[Idea] --> B[Prototype]
+    B --> C[Refactor]
+    C --> D[Refactor]
+    D --> E[Refactor]
+    E --> F[Rewrite]"
+
+"graph TD
+    A[Read Docs] --> B[Still Confused]
+    B --> C[Read Source]
+    C --> D[Enlightenment]"
+
+"graph LR
+    A[Sleep] --> B[Code]
+    B --> C[Debug]
+    C --> D[No Sleep]
+    D --> B"
+
+"sequenceDiagram
+    You->>Terminal: clear
+    Terminal-->>You: Clean slate
+    You->>Terminal: ls
+    Terminal-->>You: 47 files
+    You->>Terminal: Despair"
+
+"graph TD
+    A[Simple Feature] --> B[Edge Case]
+    B --> C[Another Edge]
+    C --> D[Rabbit Hole]
+    D --> E[Rewrite Everything]"
+    )
+
+    # Pick a random diagram
+    local idx=$((RANDOM % ${#diagrams[@]}))
+    local diagram="${diagrams[$idx]}"
+
+    echo ""
+    echo "$diagram" | "$MERMAID_ASCII_BIN" -f - --ascii -x 2 -y 1 2>/dev/null
+    echo ""
+}
+
+# If sourced, define function. If run directly, execute it.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    mermaid_fortune
+fi
