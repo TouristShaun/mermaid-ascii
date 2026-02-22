@@ -118,6 +118,11 @@ func (s *Server) Router() http.Handler {
 		}
 	})
 
+	// --- Admin cockpit ---
+	mux.HandleFunc("/cockpit", s.handleCockpit)
+	mux.HandleFunc("/api/admin/stats", s.handleAdminStats)
+	mux.HandleFunc("/api/admin/members", s.handleAdminMembers)
+
 	// CORS middleware for development.
 	return corsMiddleware(mux)
 }

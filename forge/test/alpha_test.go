@@ -924,11 +924,120 @@ func TestPhase9_FullPipelineSummary(t *testing.T) {
 
 	t.Log("")
 	t.Log("==========================================")
-	t.Log("  ALL 9 PHASES PASSED — ALPHAS VERIFIED")
+	t.Log("  ALL 10 PHASES PASSED — ALPHAS VERIFIED")
 	t.Log("==========================================")
 	t.Log("")
 	t.Log("Claude-alpha:  Designed OAuth, operator bootstrap, auth code flow, token rotation")
 	t.Log("Codex-alpha:   Invite chain (Operator->Alice->Charlie, Operator->Bob), per-member apps, mesh")
 	t.Log("Gemini-alpha:  Security audit (5/5 checks), 4 enhancement suggestions, cross-alpha voting")
 	t.Log("All alphas:    WebSocket real-time messaging, instruction hot-reload v2")
+	t.Log("Admin cockpit: Real-time dashboard, admin stats, member details, live bus feed")
+}
+
+// ============================================================
+// Phase 10: Admin Cockpit
+// ============================================================
+
+func TestPhase10_AdminCockpit(t *testing.T) {
+	t.Log("=== PHASE 10: Admin Cockpit ===")
+
+	// 1. Cockpit HTML loads.
+	resp, err := http.Get(forgeURL + "/cockpit")
+	if err != nil {
+		t.Fatalf("cockpit request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("cockpit returned %d", resp.StatusCode)
+	}
+	html := string(body)
+	if !strings.Contains(html, "Forge") || !strings.Contains(html, "Admin Cockpit") {
+		t.Fatal("cockpit HTML missing expected title")
+	}
+	if !strings.Contains(html, "Live Bus Feed") {
+		t.Fatal("cockpit HTML missing Live Bus Feed section")
+	}
+	t.Logf("cockpit: HTML loads OK (%d bytes)", len(body))
+
+	// 2. Admin stats endpoint.
+	raw := get(t, "/api/admin/stats")
+	var stats map[string]interface{}
+	json.Unmarshal(raw, &stats)
+
+	members := int(stats["members"].(float64))
+	apps := int(stats["apps"].(float64))
+	repos := int(stats["repos"].(float64))
+	enhancements := int(stats["enhancements"].(float64))
+	busMessages := int(stats["bus_messages"].(float64))
+	inviteCodes := int(stats["invite_codes"].(float64))
+
+	if members < 4 {
+		t.Fatalf("expected >= 4 members, got %d", members)
+	}
+	if apps < 5 {
+		t.Fatalf("expected >= 5 apps, got %d", apps)
+	}
+	if repos < 1 {
+		t.Fatalf("expected >= 1 repo, got %d", repos)
+	}
+	if enhancements < 4 {
+		t.Fatalf("expected >= 4 enhancements, got %d", enhancements)
+	}
+	if busMessages < 10 {
+		t.Fatalf("expected >= 10 bus messages, got %d", busMessages)
+	}
+
+	t.Logf("cockpit: stats — %d members, %d apps, %d repos, %d enhancements, %d bus msgs, %d invites",
+		members, apps, repos, enhancements, busMessages, inviteCodes)
+
+	uptime := stats["uptime"].(string)
+	t.Logf("cockpit: server uptime %s", uptime)
+
+	// 3. Admin members endpoint (enriched view).
+	membersRaw := get(t, "/api/admin/members")
+	var memberList []map[string]interface{}
+	json.Unmarshal(membersRaw, &memberList)
+	if len(memberList) < 4 {
+		t.Fatalf("expected >= 4 members in admin view, got %d", len(memberList))
+	}
+	for _, m := range memberList {
+		name := m["display_name"].(string)
+		appCount := int(m["app_count"].(float64))
+		invCreated := int(m["invites_created"].(float64))
+		isOp := m["is_operator"].(bool)
+		role := "member"
+		if isOp {
+			role = "OPERATOR"
+		}
+		t.Logf("cockpit: member %s [%s] — %d app(s), %d invite(s) created",
+			name, role, appCount, invCreated)
+	}
+
+	// 4. Verify enhancement breakdown in stats.
+	enhByStatus, ok := stats["enhancements_by_status"].(map[string]interface{})
+	if !ok || len(enhByStatus) == 0 {
+		t.Fatal("expected enhancements_by_status in stats")
+	}
+	for status, count := range enhByStatus {
+		t.Logf("cockpit: enhancements [%s] = %v", status, count)
+	}
+
+	enhByPri, ok := stats["enhancements_by_priority"].(map[string]interface{})
+	if !ok || len(enhByPri) == 0 {
+		t.Fatal("expected enhancements_by_priority in stats")
+	}
+	for pri, count := range enhByPri {
+		t.Logf("cockpit: enhancements [%s priority] = %v", pri, count)
+	}
+
+	// 5. Verify mesh apps count in stats.
+	meshApps := int(stats["mesh_apps"].(float64))
+	meshOnline := int(stats["mesh_apps_online"].(float64))
+	if meshApps < 3 {
+		t.Fatalf("expected >= 3 mesh apps in stats, got %d", meshApps)
+	}
+	t.Logf("cockpit: mesh — %d apps (%d online)", meshApps, meshOnline)
+
+	t.Log("cockpit: all admin endpoints verified")
 }

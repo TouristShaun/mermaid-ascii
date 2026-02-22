@@ -204,6 +204,13 @@ func (h *Hub) resolveTargets(msg *protocol.Message) []*Client {
 	return targets
 }
 
+// ClientCount returns the number of currently connected WebSocket clients.
+func (h *Hub) ClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
 // generateID produces a simple unique ID.
 func generateID() string {
 	return time.Now().Format("20060102150405.000000000")
