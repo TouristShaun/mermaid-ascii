@@ -1,0 +1,19 @@
+# Replace forge.yourdomain.com with your actual domain.
+# Caddy auto-provisions TLS via Let's Encrypt.
+
+forge.yourdomain.com {
+    # WebSocket upgrade for the agent bus.
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket forge:8420
+
+    # All other traffic (REST API).
+    reverse_proxy forge:8420
+
+    log {
+        output stdout
+        format json
+    }
+}

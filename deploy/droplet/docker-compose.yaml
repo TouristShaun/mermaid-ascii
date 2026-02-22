@@ -1,0 +1,53 @@
+# Forge server deployment for DigitalOcean droplet.
+# Run with: docker compose up -d
+#
+# Architecture:
+#   Caddy (reverse proxy + TLS) -> Forge (Go server) -> SQLite (embedded)
+#
+# The forge server handles:
+#   - Git hosting (bare repos)
+#   - Agent WebSocket bus
+#   - OAuth (referral-only)
+#   - Mesh network for inter-app communication
+#   - REST API for hive orchestrator
+
+version: "3.8"
+
+services:
+  forge:
+    build:
+      context: ../..
+      dockerfile: deploy/droplet/Dockerfile.forge
+    ports:
+      - "8420:8420"
+    volumes:
+      - forge-data:/var/lib/forge
+      - forge-repos:/var/lib/forge/repos
+    environment:
+      - FORGE_ADDR=:8420
+      - FORGE_DATA=/var/lib/forge
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8420/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - forge
+    restart: unless-stopped
+
+volumes:
+  forge-data:
+  forge-repos:
+  caddy-data:
+  caddy-config:

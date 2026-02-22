@@ -1,0 +1,124 @@
+# Forge Instructions — First Task
+# ================================
+# This file tells the Hive orchestrator which agents to spawn and what
+# they should build together. The first agent of each CLI type listed
+# becomes the ALPHA for that type.
+
+version: 1
+project:
+  name: "infinity-forward-oauth"
+  repo: "."
+  main_branch: "main"
+
+# Agent Specifications
+# --------------------
+# The FIRST entry of each cli_type is the ALPHA. Alphas coordinate their
+# group and can delegate sub-tasks to other instances of the same type.
+agents:
+  # Claude Code — primary architect and system designer
+  - cli_type: claude
+    count: 2
+    system_prompt: |
+      You are the lead architect for the Infinity Forward Ltd. OAuth system.
+      Your alpha role: design the system, write the core auth flows, and
+      coordinate with codex and gemini agents through @mentions.
+      Your second instance handles tests and documentation.
+
+  # OpenAI Codex — implementation specialist
+  - cli_type: codex
+    count: 2
+    system_prompt: |
+      You implement the OAuth endpoints and database layer.
+      Your alpha role: build the token exchange, referral invite system,
+      and per-member app provisioning. Your second instance builds the
+      inter-app mesh communication layer.
+
+  # Google Gemini — security auditor and reviewer
+  - cli_type: gemini
+    count: 1
+    system_prompt: |
+      You are the security auditor. Review all OAuth code for vulnerabilities.
+      Check for OWASP top 10 issues, token leakage, and race conditions.
+      Suggest enhancements to harden the system.
+
+# Tasks — The First Assignment
+# ----------------------------
+tasks:
+  - id: oauth-core
+    title: "Build referral-only OAuth 2.0 provider"
+    description: |
+      Build a complete OAuth 2.0 authorization server with these constraints:
+      - NO public registration. Members join ONLY via invite codes.
+      - The operator (team of one) bootstraps the system.
+      - Each new member gets a custom app instance upon joining.
+      - Apps use standard OAuth 2.0 authorization code flow.
+      - Tokens are short-lived (1hr) with refresh token rotation.
+    assign_to: claude
+    priority: 1
+    status: pending
+
+  - id: invite-system
+    title: "Build invite/referral system"
+    description: |
+      Implement the referral chain:
+      - Operator creates initial invite codes.
+      - Each member who joins can generate invite codes for others.
+      - Invite codes are single-use with configurable expiry.
+      - Track the referral tree (who invited whom).
+    assign_to: codex
+    priority: 1
+    status: pending
+    depends_on: [oauth-core]
+
+  - id: per-member-apps
+    title: "Custom app provisioning per member"
+    description: |
+      When a member joins via invite:
+      - Auto-create a custom OAuth app for them.
+      - Generate client_id and client_secret.
+      - Configure default scopes (profile, mesh, suggest).
+      - Enable mesh networking by default.
+      Each member's app is unique to them and represents their
+      forever relationship with Infinity Forward Ltd.
+    assign_to: codex
+    priority: 2
+    status: pending
+    depends_on: [invite-system]
+
+  - id: mesh-communication
+    title: "Inter-app mesh network"
+    description: |
+      Build the system that lets member apps talk to each other:
+      - Service discovery (apps register endpoints in the mesh).
+      - Authenticated cross-app requests (OAuth tokens required).
+      - Enhancement suggestion system (propose features to peer apps).
+      - Voting on enhancements by other members.
+    assign_to: codex
+    priority: 2
+    status: pending
+    depends_on: [per-member-apps]
+
+  - id: security-audit
+    title: "Security audit of OAuth implementation"
+    description: |
+      Review all auth code for:
+      - Token leakage vectors
+      - CSRF protection on authorize endpoint
+      - Timing attacks on token validation
+      - SQL injection in queries
+      - Rate limiting on token/invite endpoints
+      - Proper secret hashing (bcrypt, not SHA256)
+    assign_to: gemini
+    priority: 3
+    status: pending
+    depends_on: [oauth-core, invite-system]
+
+# Rules — Coordination Guidelines
+# --------------------------------
+rules:
+  - "Alpha agents coordinate work within their CLI type group."
+  - "Use @agent-id to message specific agents, @alphas for alpha-only coordination."
+  - "Before merging, request review from at least one agent of a different CLI type."
+  - "When instructions update, finish your current step then read the new instructions."
+  - "Commit frequently to your worktree branch. The alpha merges into main."
+  - "If blocked, message the relevant alpha. If still blocked, message the operator."
