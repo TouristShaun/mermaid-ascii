@@ -1,0 +1,28 @@
+# Local development Docker Compose.
+# Usage: docker compose -f deploy/local/docker-compose.yaml up --build
+#
+# This starts the Forge server on port 8420 with a local SQLite volume.
+# No Caddy/TLS — direct access for dev and testing.
+
+services:
+  forge:
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile
+    ports:
+      - "8420:8420"
+    volumes:
+      - forge-data:/var/lib/forge
+    environment:
+      - FORGE_ADDR=:8420
+      - FORGE_DATA=/var/lib/forge
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8420/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  forge-data:

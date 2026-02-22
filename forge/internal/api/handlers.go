@@ -247,7 +247,7 @@ func (s *Server) handleCreateEnhancement(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 		return
 	}
-	enh.ID = time.Now().Format("20060102150405")
+	enh.ID = time.Now().Format("20060102150405.000000000")
 	enh.CreatedAt = time.Now()
 	enh.Status = protocol.EnhanceProposed
 
@@ -353,7 +353,7 @@ func (s *Server) handleCreateRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Just record in DB; actual bare repo creation happens via git manager.
-	id := time.Now().Format("20060102150405")
+	id := time.Now().Format("20060102150405.000000000")
 	_, err := s.db.Conn().Exec(
 		`INSERT INTO repos (id, name, path, description) VALUES (?, ?, ?, ?)`,
 		id, req.Name, s.dataDir+"/repos/"+req.Name+".git", req.Description,
